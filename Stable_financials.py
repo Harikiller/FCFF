@@ -39,6 +39,32 @@ if model_type == "Financials (Banks/Insurance)":
         st.info(f"Computed Ke via CAPM = {KePct:.2f}%")
     Ke = KePct / 100
 
+    # --- WACC Section (Financials) ---
+    st.subheader("Step: Weighted Average Cost of Capital (WACC)")
+    use_direct_wacc = st.checkbox("Enter WACC directly (Financials)?")
+
+    if use_direct_wacc:
+        WACC_pct = st.number_input("Enter WACC (%)", value=10.0)
+        WACC = WACC_pct / 100.0
+        st.success(f"Using direct WACC = {WACC*100:.2f}%")
+    else:
+        KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0)
+        taxRatePct = st.number_input("Corporate Tax Rate (%)", value=30.0)
+        Kd_after = (KdPct/100) * (1 - taxRatePct/100)
+
+        E = st.number_input("Market Value of Equity", value=1000.0)
+        D = st.number_input("Market Value of Debt", value=500.0)
+
+        if (E + D) == 0:
+            st.error("⚠️ Equity + Debt cannot be zero. Please enter valid values or use direct WACC option.")
+            WACC = Ke  # fallback
+        else:
+            W_e = E / (E + D)
+            W_d = D / (E + D)
+            WACC = W_e*Ke + W_d*Kd_after
+            st.success(f"WACC = {WACC*100:.2f}% (We={W_e:.2%}, Wd={W_d:.2%})")
+
+    # --- Model choice ---
     model_choice = st.selectbox("Choose Model", [
         "Gordon Growth DDM",
         "ROE-based DDM",
@@ -125,17 +151,29 @@ else:
     g = ROCE * reinv
     gT = st.number_input("Terminal growth rate (%)", value=3.0) / 100
 
-    # WACC
-    KePct = st.number_input("Cost of Equity Ke (%)", value=12.0)
-    Ke = KePct/100
-    KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0)
-    Kd_after = KdPct/100 * (1 - taxRate)
-    E = st.number_input("Market Value of Equity")
-    D = st.number_input("Market Value of Debt")
-    W_e = E / (E+D)
-    W_d = D / (E+D)
-    WACC = W_e*Ke + W_d*Kd_after
-    st.info(f"WACC = {WACC*100:.2f}%")
+    # --- WACC Section (Non-Financials) ---
+    st.subheader("Step: Weighted Average Cost of Capital (WACC)")
+    use_direct_wacc = st.checkbox("Enter WACC directly (Non-Financials)?")
+
+    if use_direct_wacc:
+        WACC_pct = st.number_input("Enter WACC (%)", value=10.0)
+        WACC = WACC_pct / 100.0
+        st.success(f"Using direct WACC = {WACC*100:.2f}%")
+    else:
+        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0)
+        Ke = KePct/100
+        KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0)
+        Kd_after = (KdPct/100) * (1 - taxRate)
+        E = st.number_input("Market Value of Equity", value=1000.0)
+        D = st.number_input("Market Value of Debt", value=500.0)
+        if (E + D) == 0:
+            st.error("⚠️ Equity + Debt cannot be zero. Please enter valid values or use direct WACC option.")
+            WACC = Ke
+        else:
+            W_e = E / (E + D)
+            W_d = D / (E + D)
+            WACC = W_e*Ke + W_d*Kd_after
+            st.success(f"WACC = {WACC*100:.2f}% (We={W_e:.2%}, Wd={W_d:.2%})")
 
     # Forecast FCFF
     pvFCFF, fcff_t = 0, FCFF0
@@ -157,4 +195,3 @@ else:
     IVps = EquityValue / Shares
     st.success(f"Intrinsic Value per Share = {IVps:.2f}")
     st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
-
