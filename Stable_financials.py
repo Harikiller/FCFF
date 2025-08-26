@@ -191,7 +191,11 @@ else:
     Cash = st.number_input("Cash & Equivalents")
     NetDebt = Borrowings - Cash
     EquityValue = EV - NetDebt
-    Shares = st.number_input("Shares Outstanding")
-    IVps = EquityValue / Shares
-    st.success(f"Intrinsic Value per Share = {IVps:.2f}")
-    st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
+    Shares = st.number_input("Shares Outstanding", value=0)
+
+    if Shares <= 0:
+        st.error("⚠️ Shares Outstanding must be greater than 0 to calculate Intrinsic Value per Share.")
+    else:
+        IVps = EquityValue / Shares
+        st.success(f"Intrinsic Value per Share = {IVps:.2f}")
+        st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
