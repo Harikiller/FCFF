@@ -1,18 +1,38 @@
 import streamlit as st
 import pandas as pd
-import math
+import os
 from datetime import datetime
+from io import BytesIO
 
 st.set_page_config(page_title="Intrinsic Value Calculator", layout="wide")
 
 # ---------- Helper Functions ----------
 def round2(x): return round(x, 4)
+def cost_of_equity_capm(rf, beta, erp): return rf + beta * erp
+def g_from_roe(roe, payout): return roe * (1 - payout)
 
-def cost_of_equity_capm(rf, beta, erp):
-    return rf + beta * erp
+# ---------- History File ----------
+history_file = "valuation_history.csv"
 
-def g_from_roe(roe, payout):
-    return roe * (1 - payout)
+def save_history(company, ivps, model_type):
+    new_row = pd.DataFrame([{
+        "Company": company,
+        "IV per Share": round(ivps, 2),
+        "Model": model_type,
+        "Date": datetime.now().strftime("%Y-%m-%d %H:%M")
+    }])
+    if os.path.exists(history_file):
+        old = pd.read_csv(history_file)
+        history = pd.concat([old, new_row], ignore_index=True)
+    else:
+        history = new_row
+    history.to_csv(history_file, index=False)
+
+def export_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Valuations")
+    return output.getvalue()
 
 # ---------- UI ----------
 st.title("📈 Intrinsic Value Calculator")
@@ -39,32 +59,6 @@ if model_type == "Financials (Banks/Insurance)":
         st.info(f"Computed Ke via CAPM = {KePct:.2f}%")
     Ke = KePct / 100
 
-    # --- WACC Section (Financials) ---
-    st.subheader("Step: Weighted Average Cost of Capital (WACC)")
-    use_direct_wacc = st.checkbox("Enter WACC directly (Financials)?")
-
-    if use_direct_wacc:
-        WACC_pct = st.number_input("Enter WACC (%)", value=10.0)
-        WACC = WACC_pct / 100.0
-        st.success(f"Using direct WACC = {WACC*100:.2f}%")
-    else:
-        KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0)
-        taxRatePct = st.number_input("Corporate Tax Rate (%)", value=30.0)
-        Kd_after = (KdPct/100) * (1 - taxRatePct/100)
-
-        E = st.number_input("Market Value of Equity", value=1000.0)
-        D = st.number_input("Market Value of Debt", value=500.0)
-
-        if (E + D) == 0:
-            st.error("⚠️ Equity + Debt cannot be zero. Please enter valid values or use direct WACC option.")
-            WACC = Ke  # fallback
-        else:
-            W_e = E / (E + D)
-            W_d = D / (E + D)
-            WACC = W_e*Ke + W_d*Kd_after
-            st.success(f"WACC = {WACC*100:.2f}% (We={W_e:.2%}, Wd={W_d:.2%})")
-
-    # --- Model choice ---
     model_choice = st.selectbox("Choose Model", [
         "Gordon Growth DDM",
         "ROE-based DDM",
@@ -72,70 +66,68 @@ if model_type == "Financials (Banks/Insurance)":
         "Residual Income"
     ])
 
-    value_per_share, note = None, None
+    value_per_share = None
 
-    if model_choice == "Gordon Growth DDM":
-        D1 = st.number_input("Expected Dividend Next Year (D1)")
-        g = st.number_input("Expected perpetual growth rate g (%)", value=5.0) / 100
-        if g >= Ke:
-            st.error("⚠️ g must be less than Ke for Gordon DDM.")
-        else:
-            value_per_share = D1 / (Ke - g)
-            note = f"Gordon DDM: D1={D1}, Ke={KePct:.2f}%, g={g*100:.2f}%"
+    if st.button("💡 Calculate Intrinsic Value"):
+        if model_choice == "Gordon Growth DDM":
+            D1 = st.number_input("Expected Dividend Next Year (D1)")
+            g = st.number_input("Expected perpetual growth rate g (%)", value=5.0) / 100
+            if g >= Ke:
+                st.error("⚠️ g must be less than Ke for Gordon DDM.")
+            else:
+                value_per_share = D1 / (Ke - g)
 
-    elif model_choice == "ROE-based DDM":
-        EPS = st.number_input("Expected EPS next year")
-        ROE = st.number_input("ROE (%)", value=15.0)
-        payout = st.number_input("Dividend payout ratio (%)", value=20.0)
-        g = g_from_roe(ROE/100, payout/100)
-        D1 = EPS * (payout/100)
-        if g >= Ke:
-            st.error("⚠️ g must be less than Ke for ROE-DDM.")
-        else:
-            value_per_share = D1 / (Ke - g)
-            note = f"ROE-DDM: EPS={EPS}, ROE={ROE}%, payout={payout}%, g={g*100:.2f}%"
+        elif model_choice == "ROE-based DDM":
+            EPS = st.number_input("Expected EPS next year")
+            ROE = st.number_input("ROE (%)", value=15.0)
+            payout = st.number_input("Dividend payout ratio (%)", value=20.0)
+            g = g_from_roe(ROE/100, payout/100)
+            D1 = EPS * (payout/100)
+            if g >= Ke:
+                st.error("⚠️ g must be less than Ke for ROE-DDM.")
+            else:
+                value_per_share = D1 / (Ke - g)
 
-    elif model_choice == "Two-stage DDM":
-        D0 = st.number_input("Last Dividend (D0)")
-        g_high = st.number_input("High-growth rate (%)", value=10.0) / 100
-        n = st.number_input("High-growth years", value=5, step=1)
-        g_stable = st.number_input("Stable growth rate (%)", value=4.0) / 100
-        pvDiv = 0
-        for t in range(1, int(n)+1):
-            Dt = D0 * (1 + g_high)**t
-            pvDiv += Dt / (1 + Ke)**t
-        Dn1 = D0 * (1 + g_high)**n * (1 + g_stable)
-        TV = Dn1 / (Ke - g_stable)
-        pvTV = TV / (1 + Ke)**n
-        value_per_share = pvDiv + pvTV
-        note = f"Two-stage DDM: D0={D0}, g_high={g_high*100:.2f}%, n={n}, g_stable={g_stable*100:.2f}%"
+        elif model_choice == "Two-stage DDM":
+            D0 = st.number_input("Last Dividend (D0)")
+            g_high = st.number_input("High-growth rate (%)", value=10.0) / 100
+            n = st.number_input("High-growth years", value=5, step=1)
+            g_stable = st.number_input("Stable growth rate (%)", value=4.0) / 100
+            pvDiv = 0
+            for t in range(1, int(n)+1):
+                Dt = D0 * (1 + g_high)**t
+                pvDiv += Dt / (1 + Ke)**t
+            Dn1 = D0 * (1 + g_high)**n * (1 + g_stable)
+            TV = Dn1 / (Ke - g_stable)
+            pvTV = TV / (1 + Ke)**n
+            value_per_share = pvDiv + pvTV
 
-    elif model_choice == "Residual Income":
-        BV0 = st.number_input("Book Value per Share (BV0)")
-        ROE = st.number_input("ROE (%)", value=15.0) / 100
-        payout = st.number_input("Dividend payout ratio (%)", value=20.0) / 100
-        horizon = st.number_input("Forecast horizon (years)", value=5, step=1)
-        BVt, pvRI = BV0, 0
-        for t in range(1, int(horizon)+1):
-            earnings = ROE * BVt
-            dividends = earnings * payout
-            residual = earnings - Ke * BVt
-            pvRI += residual / (1 + Ke)**t
-            BVt = BVt + (earnings - dividends)
-        value_per_share = BV0 + pvRI
-        note = f"Residual Income: BV0={BV0}, ROE={ROE*100:.2f}%, payout={payout*100:.2f}%, horizon={horizon}"
+        elif model_choice == "Residual Income":
+            BV0 = st.number_input("Book Value per Share (BV0)")
+            ROE = st.number_input("ROE (%)", value=15.0) / 100
+            payout = st.number_input("Dividend payout ratio (%)", value=20.0) / 100
+            horizon = st.number_input("Forecast horizon (years)", value=5, step=1)
+            BVt, pvRI = BV0, 0
+            for t in range(1, int(horizon)+1):
+                earnings = ROE * BVt
+                dividends = earnings * payout
+                residual = earnings - Ke * BVt
+                pvRI += residual / (1 + Ke)**t
+                BVt = BVt + (earnings - dividends)
+            value_per_share = BV0 + pvRI
 
-    if value_per_share:
-        iv = round2(value_per_share)
-        st.success(f"Intrinsic Value per Share = {iv}")
-        st.info(f"Margin of Safety (±20%): {round2(iv*0.8)} — {round2(iv*1.2)}")
-        if note: st.caption(note)
+        if value_per_share:
+            iv = round2(value_per_share)
+            st.success(f"Intrinsic Value per Share = {iv}")
+            st.info(f"Margin of Safety (±20%): {round2(iv*0.8)} — {round2(iv*1.2)}")
+            save_history(ticker if ticker else "Unknown", iv, "Financials - " + model_choice)
 
 # ============================================================
 #   NON-FINANCIAL COMPANIES — FCFF DCF
 # ============================================================
 else:
     st.subheader("Valuation for Non-Financial Companies (FCFF-DCF)")
+    ticker = st.text_input("Company name / ticker")
     EBIT = st.number_input("EBIT (₹ Cr)")
     taxRate = st.number_input("Tax rate (%)", value=25.0) / 100
     DA = st.number_input("Depreciation & Amortization")
@@ -151,51 +143,67 @@ else:
     g = ROCE * reinv
     gT = st.number_input("Terminal growth rate (%)", value=3.0) / 100
 
-    # --- WACC Section (Non-Financials) ---
-    st.subheader("Step: Weighted Average Cost of Capital (WACC)")
-    use_direct_wacc = st.checkbox("Enter WACC directly (Non-Financials)?")
-
+    # WACC
+    use_direct_wacc = st.checkbox("Enter WACC directly?")
     if use_direct_wacc:
         WACC_pct = st.number_input("Enter WACC (%)", value=10.0)
         WACC = WACC_pct / 100.0
-        st.success(f"Using direct WACC = {WACC*100:.2f}%")
     else:
         KePct = st.number_input("Cost of Equity Ke (%)", value=12.0)
         Ke = KePct/100
         KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0)
-        Kd_after = (KdPct/100) * (1 - taxRate)
+        Kd_after = KdPct/100 * (1 - taxRate)
         E = st.number_input("Market Value of Equity", value=1000.0)
         D = st.number_input("Market Value of Debt", value=500.0)
         if (E + D) == 0:
-            st.error("⚠️ Equity + Debt cannot be zero. Please enter valid values or use direct WACC option.")
-            WACC = Ke
+            st.error("⚠️ Equity + Debt cannot be zero.")
+            WACC = 0
         else:
             W_e = E / (E + D)
             W_d = D / (E + D)
             WACC = W_e*Ke + W_d*Kd_after
             st.success(f"WACC = {WACC*100:.2f}% (We={W_e:.2%}, Wd={W_d:.2%})")
 
-    # Forecast FCFF
-    pvFCFF, fcff_t = 0, FCFF0
-    for t in range(1, int(years)+1):
-        fcff_t *= (1+g)
-        pvFCFF += fcff_t / (1+WACC)**t
+    if st.button("💡 Calculate Intrinsic Value"):
+        # Forecast FCFF
+        pvFCFF, fcff_t = 0, FCFF0
+        for t in range(1, int(years)+1):
+            fcff_t *= (1+g)
+            pvFCFF += fcff_t / (1+WACC)**t
 
-    # Terminal Value
-    FCFF_Nplus1 = fcff_t * (1+gT)
-    TV = FCFF_Nplus1 / (WACC - gT)
-    PV_TV = TV / (1+WACC)**years
-    EV = pvFCFF + PV_TV
+        # Terminal Value
+        FCFF_Nplus1 = fcff_t * (1+gT)
+        TV = FCFF_Nplus1 / (WACC - gT)
+        PV_TV = TV / (1+WACC)**years
+        EV = pvFCFF + PV_TV
 
-    Borrowings = st.number_input("Borrowings")
-    Cash = st.number_input("Cash & Equivalents")
-    NetDebt = Borrowings - Cash
-    EquityValue = EV - NetDebt
-    Shares = st.number_input("Shares Outstanding", value=0)
+        Borrowings = st.number_input("Borrowings")
+        Cash = st.number_input("Cash & Equivalents")
+        NetDebt = Borrowings - Cash
+        EquityValue = EV - NetDebt
+        Shares = st.number_input("Shares Outstanding", value=0)
 
-    if Shares <= 0:
-        st.error("⚠️ Shares Outstanding must be greater than 0 to calculate Intrinsic Value per Share.")
-    else:
-        IVps = EquityValue / Shares
-        st.success(f"Intrinsic Value per Share = {IVps:.2f}")
-        st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
+        if Shares <= 0:
+            st.error("⚠️ Shares Outstanding must be greater than 0.")
+        else:
+            IVps = EquityValue / Shares
+            st.success(f"Intrinsic Value per Share = {IVps:.2f}")
+            st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
+            save_history(ticker if ticker else "Unknown", IVps, "Non-Financials - FCFF")
+
+# ============================================================
+#   SHOW HISTORY + EXPORT
+# ============================================================
+if os.path.exists(history_file):
+    st.subheader("📜 Valuation History")
+    hist = pd.read_csv(history_file)
+    st.dataframe(hist)
+
+    # Download Excel
+    excel_bytes = export_excel(hist)
+    st.download_button(
+        label="📥 Download Valuation History (Excel)",
+        data=excel_bytes,
+        file_name="valuation_history.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
