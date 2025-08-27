@@ -50,11 +50,11 @@ if model_type == "Financials (Banks/Insurance)":
     # Cost of equity
     ke_input = st.radio("How do you want to enter Cost of Equity?", ["Direct Input", "CAPM (Rf, Beta, ERP)"])
     if ke_input == "Direct Input":
-        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0, format="%.4f")
+        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0, step=0.0001, format="%.4f")
     else:
-        Rf = st.number_input("Risk-free rate Rf (%)", value=7.0, format="%.4f")
-        Beta = st.number_input("Beta", value=1.0, format="%.4f")
-        ERP = st.number_input("Equity Risk Premium (%)", value=6.0, format="%.4f")
+        Rf = st.number_input("Risk-free rate Rf (%)", value=7.0, step=0.0001, format="%.4f")
+        Beta = st.number_input("Beta", value=1.0, step=0.0001, format="%.4f")
+        ERP = st.number_input("Equity Risk Premium (%)", value=6.0, step=0.0001, format="%.4f")
         KePct = cost_of_equity_capm(Rf, Beta, ERP)
         st.info(f"Computed Ke via CAPM = {KePct:.4f}%")
     Ke = KePct / 100
@@ -68,26 +68,26 @@ if model_type == "Financials (Banks/Insurance)":
 
     # --- Inputs depending on model ---
     if model_choice == "Gordon Growth DDM":
-        D1 = st.number_input("Expected Dividend Next Year (D1)", value=10.0, format="%.4f")
-        g = st.number_input("Expected perpetual growth rate g (%)", value=5.0, format="%.4f") / 100
+        D1 = st.number_input("Expected Dividend Next Year (D1)", value=10.0, step=0.0001, format="%.4f")
+        g = st.number_input("Expected perpetual growth rate g (%)", value=5.0, step=0.0001, format="%.4f") / 100
 
     elif model_choice == "ROE-based DDM":
-        EPS = st.number_input("Expected EPS next year", value=50.0, format="%.4f")
-        ROE = st.number_input("ROE (%)", value=15.0, format="%.4f")
-        payout = st.number_input("Dividend payout ratio (%)", value=20.0, format="%.4f")
+        EPS = st.number_input("Expected EPS next year", value=50.0, step=0.0001, format="%.4f")
+        ROE = st.number_input("ROE (%)", value=15.0, step=0.0001, format="%.4f")
+        payout = st.number_input("Dividend payout ratio (%)", value=20.0, step=0.0001, format="%.4f")
         g = g_from_roe(ROE/100, payout/100)
         D1 = EPS * (payout/100)
 
     elif model_choice == "Two-stage DDM":
-        D0 = st.number_input("Last Dividend (D0)", value=8.0, format="%.4f")
-        g_high = st.number_input("High-growth rate (%)", value=10.0, format="%.4f") / 100
+        D0 = st.number_input("Last Dividend (D0)", value=8.0, step=0.0001, format="%.4f")
+        g_high = st.number_input("High-growth rate (%)", value=10.0, step=0.0001, format="%.4f") / 100
         n = st.number_input("High-growth years", value=5, step=1)
-        g_stable = st.number_input("Stable growth rate (%)", value=4.0, format="%.4f") / 100
+        g_stable = st.number_input("Stable growth rate (%)", value=4.0, step=0.0001, format="%.4f") / 100
 
     elif model_choice == "Residual Income":
-        BV0 = st.number_input("Book Value per Share (BV0)", value=100.0, format="%.4f")
-        ROE = st.number_input("ROE (%)", value=15.0, format="%.4f") / 100
-        payout = st.number_input("Dividend payout ratio (%)", value=20.0, format="%.4f") / 100
+        BV0 = st.number_input("Book Value per Share (BV0)", value=100.0, step=0.0001, format="%.4f")
+        ROE = st.number_input("ROE (%)", value=15.0, step=0.0001, format="%.4f") / 100
+        payout = st.number_input("Dividend payout ratio (%)", value=20.0, step=0.0001, format="%.4f") / 100
         horizon = st.number_input("Forecast horizon (years)", value=5, step=1)
 
     # --- Calculation ---
@@ -141,33 +141,33 @@ if model_type == "Financials (Banks/Insurance)":
 else:
     st.subheader("Valuation for Non-Financial Companies (FCFF-DCF)")
     ticker = st.text_input("Company name / ticker")
-    EBIT = st.number_input("EBIT (₹ Cr)", value=0.0, format="%.4f")
-    taxRate = st.number_input("Tax rate (%)", value=25.0, format="%.4f") / 100
-    DA = st.number_input("Depreciation & Amortization", value=0.0, format="%.4f")
-    Capex = st.number_input("Capital Expenditure", value=0.0, format="%.4f")
-    DeltaWC = st.number_input("Change in Working Capital (ΔWC)", value=0.0, format="%.4f")
+    EBIT = st.number_input("EBIT (₹ Cr)", value=0.0, step=0.0001, format="%.4f")
+    taxRate = st.number_input("Tax rate (%)", value=25.0, step=0.0001, format="%.4f") / 100
+    DA = st.number_input("Depreciation & Amortization", value=0.0, step=0.0001, format="%.4f")
+    Capex = st.number_input("Capital Expenditure", value=0.0, step=0.0001, format="%.4f")
+    DeltaWC = st.number_input("Change in Working Capital (ΔWC)", value=0.0, step=0.0001, format="%.4f")
     NOPAT = EBIT * (1 - taxRate)
     FCFF0 = NOPAT + DA - Capex - DeltaWC
     st.info(f"Base FCFF = {round2(FCFF0)}")
 
     years = st.number_input("Forecast period (years)", value=5, step=1)
-    ROCE = st.number_input("ROCE (%)", value=15.0, format="%.4f") / 100
-    reinv = st.number_input("Reinvestment Rate (%)", value=40.0, format="%.4f") / 100
+    ROCE = st.number_input("ROCE (%)", value=15.0, step=0.0001, format="%.4f") / 100
+    reinv = st.number_input("Reinvestment Rate (%)", value=40.0, step=0.0001, format="%.4f") / 100
     g = ROCE * reinv
-    gT = st.number_input("Terminal growth rate (%)", value=3.0, format="%.4f") / 100
+    gT = st.number_input("Terminal growth rate (%)", value=3.0, step=0.0001, format="%.4f") / 100
 
     # WACC
     use_direct_wacc = st.checkbox("Enter WACC directly?")
     if use_direct_wacc:
-        WACC_pct = st.number_input("Enter WACC (%)", value=10.0, format="%.4f")
+        WACC_pct = st.number_input("Enter WACC (%)", value=10.0, step=0.0001, format="%.4f")
         WACC = WACC_pct / 100.0
     else:
-        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0, format="%.4f")
+        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0, step=0.0001, format="%.4f")
         Ke = KePct/100
-        KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0, format="%.4f")
+        KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0, step=0.0001, format="%.4f")
         Kd_after = KdPct/100 * (1 - taxRate)
-        E = st.number_input("Market Value of Equity", value=1000.0, format="%.4f")
-        D = st.number_input("Market Value of Debt", value=500.0, format="%.4f")
+        E = st.number_input("Market Value of Equity", value=1000.0, step=0.0001, format="%.4f")
+        D = st.number_input("Market Value of Debt", value=500.0, step=0.0001, format="%.4f")
         if (E + D) == 0:
             st.error("⚠️ Equity + Debt cannot be zero.")
             WACC = 0
@@ -193,11 +193,11 @@ else:
             PV_TV = TV / (1+WACC)**years
             EV = pvFCFF + PV_TV
 
-            Borrowings = st.number_input("Borrowings", value=0.0, format="%.4f")
-            Cash = st.number_input("Cash & Equivalents", value=0.0, format="%.4f")
+            Borrowings = st.number_input("Borrowings", value=0.0, step=0.0001, format="%.4f")
+            Cash = st.number_input("Cash & Equivalents", value=0.0, step=0.0001, format="%.4f")
             NetDebt = Borrowings - Cash
             EquityValue = EV - NetDebt
-            Shares = st.number_input("Shares Outstanding", value=0.0, format="%.4f")
+            Shares = st.number_input("Shares Outstanding", value=0.0, step=0.0001, format="%.4f")
 
             if Shares <= 0:
                 st.error("⚠️ Shares Outstanding must be greater than 0.")
