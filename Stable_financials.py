@@ -66,47 +66,60 @@ if model_type == "Financials (Banks/Insurance)":
         "Residual Income"
     ])
 
-    value_per_share = None
+    # --- Inputs depending on model ---
+    if model_choice == "Gordon Growth DDM":
+        D1 = st.number_input("Expected Dividend Next Year (D1)", value=10.0)
+        g = st.number_input("Expected perpetual growth rate g (%)", value=5.0) / 100
 
+    elif model_choice == "ROE-based DDM":
+        EPS = st.number_input("Expected EPS next year", value=50.0)
+        ROE = st.number_input("ROE (%)", value=15.0)
+        payout = st.number_input("Dividend payout ratio (%)", value=20.0)
+        g = g_from_roe(ROE/100, payout/100)
+        D1 = EPS * (payout/100)
+
+    elif model_choice == "Two-stage DDM":
+        D0 = st.number_input("Last Dividend (D0)", value=8.0)
+        g_high = st.number_input("High-growth rate (%)", value=10.0) / 100
+        n = st.number_input("High-growth years", value=5, step=1)
+        g_stable = st.number_input("Stable growth rate (%)", value=4.0) / 100
+
+    elif model_choice == "Residual Income":
+        BV0 = st.number_input("Book Value per Share (BV0)", value=100.0)
+        ROE = st.number_input("ROE (%)", value=15.0) / 100
+        payout = st.number_input("Dividend payout ratio (%)", value=20.0) / 100
+        horizon = st.number_input("Forecast horizon (years)", value=5, step=1)
+
+    # --- Calculation ---
     if st.button("💡 Calculate Intrinsic Value"):
+        value_per_share = None
+
         if model_choice == "Gordon Growth DDM":
-            D1 = st.number_input("Expected Dividend Next Year (D1)")
-            g = st.number_input("Expected perpetual growth rate g (%)", value=5.0) / 100
             if g >= Ke:
                 st.error("⚠️ g must be less than Ke for Gordon DDM.")
             else:
                 value_per_share = D1 / (Ke - g)
 
         elif model_choice == "ROE-based DDM":
-            EPS = st.number_input("Expected EPS next year")
-            ROE = st.number_input("ROE (%)", value=15.0)
-            payout = st.number_input("Dividend payout ratio (%)", value=20.0)
-            g = g_from_roe(ROE/100, payout/100)
-            D1 = EPS * (payout/100)
             if g >= Ke:
                 st.error("⚠️ g must be less than Ke for ROE-DDM.")
             else:
                 value_per_share = D1 / (Ke - g)
 
         elif model_choice == "Two-stage DDM":
-            D0 = st.number_input("Last Dividend (D0)")
-            g_high = st.number_input("High-growth rate (%)", value=10.0) / 100
-            n = st.number_input("High-growth years", value=5, step=1)
-            g_stable = st.number_input("Stable growth rate (%)", value=4.0) / 100
             pvDiv = 0
             for t in range(1, int(n)+1):
                 Dt = D0 * (1 + g_high)**t
                 pvDiv += Dt / (1 + Ke)**t
             Dn1 = D0 * (1 + g_high)**n * (1 + g_stable)
-            TV = Dn1 / (Ke - g_stable)
-            pvTV = TV / (1 + Ke)**n
-            value_per_share = pvDiv + pvTV
+            if g_stable >= Ke:
+                st.error("⚠️ Stable g must be less than Ke.")
+            else:
+                TV = Dn1 / (Ke - g_stable)
+                pvTV = TV / (1 + Ke)**n
+                value_per_share = pvDiv + pvTV
 
         elif model_choice == "Residual Income":
-            BV0 = st.number_input("Book Value per Share (BV0)")
-            ROE = st.number_input("ROE (%)", value=15.0) / 100
-            payout = st.number_input("Dividend payout ratio (%)", value=20.0) / 100
-            horizon = st.number_input("Forecast horizon (years)", value=5, step=1)
             BVt, pvRI = BV0, 0
             for t in range(1, int(horizon)+1):
                 earnings = ROE * BVt
@@ -165,31 +178,34 @@ else:
             st.success(f"WACC = {WACC*100:.2f}% (We={W_e:.2%}, Wd={W_d:.2%})")
 
     if st.button("💡 Calculate Intrinsic Value"):
-        # Forecast FCFF
-        pvFCFF, fcff_t = 0, FCFF0
-        for t in range(1, int(years)+1):
-            fcff_t *= (1+g)
-            pvFCFF += fcff_t / (1+WACC)**t
-
-        # Terminal Value
-        FCFF_Nplus1 = fcff_t * (1+gT)
-        TV = FCFF_Nplus1 / (WACC - gT)
-        PV_TV = TV / (1+WACC)**years
-        EV = pvFCFF + PV_TV
-
-        Borrowings = st.number_input("Borrowings")
-        Cash = st.number_input("Cash & Equivalents")
-        NetDebt = Borrowings - Cash
-        EquityValue = EV - NetDebt
-        Shares = st.number_input("Shares Outstanding", value=0)
-
-        if Shares <= 0:
-            st.error("⚠️ Shares Outstanding must be greater than 0.")
+        if WACC <= gT:
+            st.error("⚠️ WACC must be greater than terminal growth rate.")
         else:
-            IVps = EquityValue / Shares
-            st.success(f"Intrinsic Value per Share = {IVps:.2f}")
-            st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
-            save_history(ticker if ticker else "Unknown", IVps, "Non-Financials - FCFF")
+            # Forecast FCFF
+            pvFCFF, fcff_t = 0, FCFF0
+            for t in range(1, int(years)+1):
+                fcff_t *= (1+g)
+                pvFCFF += fcff_t / (1+WACC)**t
+
+            # Terminal Value
+            FCFF_Nplus1 = fcff_t * (1+gT)
+            TV = FCFF_Nplus1 / (WACC - gT)
+            PV_TV = TV / (1+WACC)**years
+            EV = pvFCFF + PV_TV
+
+            Borrowings = st.number_input("Borrowings")
+            Cash = st.number_input("Cash & Equivalents")
+            NetDebt = Borrowings - Cash
+            EquityValue = EV - NetDebt
+            Shares = st.number_input("Shares Outstanding", value=0)
+
+            if Shares <= 0:
+                st.error("⚠️ Shares Outstanding must be greater than 0.")
+            else:
+                IVps = EquityValue / Shares
+                st.success(f"Intrinsic Value per Share = {IVps:.2f}")
+                st.info(f"Margin of Safety (±20%): {IVps*0.8:.2f} — {IVps*1.2:.2f}")
+                save_history(ticker if ticker else "Unknown", IVps, "Non-Financials - FCFF")
 
 # ============================================================
 #   SHOW HISTORY + EXPORT
