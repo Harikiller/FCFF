@@ -50,11 +50,16 @@ if model_type == "Financials (Banks/Insurance)":
     # Cost of equity
     ke_input = st.radio("How do you want to enter Cost of Equity?", ["Direct Input", "CAPM (Rf, Beta, ERP)"])
     if ke_input == "Direct Input":
-        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0, step=0.0001, format="%.4f")
+        KePct = st.text_input("Cost of Equity Ke (%)", value="12.0")
+        try: KePct = float(KePct)
+        except ValueError: st.error("Enter a valid number for Ke"); KePct = 0.0
     else:
-        Rf = st.number_input("Risk-free rate Rf (%)", value=7.0, step=0.0001, format="%.4f")
-        Beta = st.number_input("Beta", value=1.0, step=0.0001, format="%.4f")
-        ERP = st.number_input("Equity Risk Premium (%)", value=6.0, step=0.0001, format="%.4f")
+        Rf = st.text_input("Risk-free rate Rf (%)", value="7.0")
+        Beta = st.text_input("Beta", value="1.0")
+        ERP = st.text_input("Equity Risk Premium (%)", value="6.0")
+        try:
+            Rf, Beta, ERP = float(Rf), float(Beta), float(ERP)
+        except ValueError: st.error("Enter valid numbers for CAPM"); Rf=Beta=ERP=0.0
         KePct = cost_of_equity_capm(Rf, Beta, ERP)
         st.info(f"Computed Ke via CAPM = {KePct:.4f}%")
     Ke = KePct / 100
@@ -68,27 +73,38 @@ if model_type == "Financials (Banks/Insurance)":
 
     # --- Inputs depending on model ---
     if model_choice == "Gordon Growth DDM":
-        D1 = st.number_input("Expected Dividend Next Year (D1)", value=10.0, step=0.0001, format="%.4f")
-        g = st.number_input("Expected perpetual growth rate g (%)", value=5.0, step=0.0001, format="%.4f") / 100
+        D1 = st.text_input("Expected Dividend Next Year (D1)", value="10.0")
+        g = st.text_input("Expected perpetual growth rate g (%)", value="5.0")
+        try: D1, g = float(D1), float(g)/100
+        except ValueError: st.error("Enter valid numbers for D1 and g"); D1=g=0.0
 
     elif model_choice == "ROE-based DDM":
-        EPS = st.number_input("Expected EPS next year", value=50.0, step=0.0001, format="%.4f")
-        ROE = st.number_input("ROE (%)", value=15.0, step=0.0001, format="%.4f")
-        payout = st.number_input("Dividend payout ratio (%)", value=20.0, step=0.0001, format="%.4f")
-        g = g_from_roe(ROE/100, payout/100)
-        D1 = EPS * (payout/100)
+        EPS = st.text_input("Expected EPS next year", value="50.0")
+        ROE = st.text_input("ROE (%)", value="15.0")
+        payout = st.text_input("Dividend payout ratio (%)", value="20.0")
+        try:
+            EPS, ROE, payout = float(EPS), float(ROE)/100, float(payout)/100
+        except ValueError: st.error("Enter valid numbers for EPS, ROE, payout"); EPS=ROE=payout=0.0
+        g = g_from_roe(ROE, payout)
+        D1 = EPS * payout
 
     elif model_choice == "Two-stage DDM":
-        D0 = st.number_input("Last Dividend (D0)", value=8.0, step=0.0001, format="%.4f")
-        g_high = st.number_input("High-growth rate (%)", value=10.0, step=0.0001, format="%.4f") / 100
-        n = st.number_input("High-growth years", value=5, step=1)
-        g_stable = st.number_input("Stable growth rate (%)", value=4.0, step=0.0001, format="%.4f") / 100
+        D0 = st.text_input("Last Dividend (D0)", value="8.0")
+        g_high = st.text_input("High-growth rate (%)", value="10.0")
+        n = st.text_input("High-growth years", value="5")
+        g_stable = st.text_input("Stable growth rate (%)", value="4.0")
+        try:
+            D0, g_high, n, g_stable = float(D0), float(g_high)/100, int(n), float(g_stable)/100
+        except ValueError: st.error("Enter valid numbers"); D0=g_high=g_stable=0.0; n=1
 
     elif model_choice == "Residual Income":
-        BV0 = st.number_input("Book Value per Share (BV0)", value=100.0, step=0.0001, format="%.4f")
-        ROE = st.number_input("ROE (%)", value=15.0, step=0.0001, format="%.4f") / 100
-        payout = st.number_input("Dividend payout ratio (%)", value=20.0, step=0.0001, format="%.4f") / 100
-        horizon = st.number_input("Forecast horizon (years)", value=5, step=1)
+        BV0 = st.text_input("Book Value per Share (BV0)", value="100.0")
+        ROE = st.text_input("ROE (%)", value="15.0")
+        payout = st.text_input("Dividend payout ratio (%)", value="20.0")
+        horizon = st.text_input("Forecast horizon (years)", value="5")
+        try:
+            BV0, ROE, payout, horizon = float(BV0), float(ROE)/100, float(payout)/100, int(horizon)
+        except ValueError: st.error("Enter valid numbers"); BV0=ROE=payout=horizon=0
 
     # --- Calculation ---
     if st.button("💡 Calculate Intrinsic Value"):
@@ -141,85 +157,33 @@ if model_type == "Financials (Banks/Insurance)":
 else:
     st.subheader("Valuation for Non-Financial Companies (FCFF-DCF)")
     ticker = st.text_input("Company name / ticker")
-    EBIT = st.number_input("EBIT (₹ Cr)", value=0.0, step=0.0001, format="%.4f")
-    taxRate = st.number_input("Tax rate (%)", value=25.0, step=0.0001, format="%.4f") / 100
-    DA = st.number_input("Depreciation & Amortization", value=0.0, step=0.0001, format="%.4f")
-    Capex = st.number_input("Capital Expenditure", value=0.0, step=0.0001, format="%.4f")
-    DeltaWC = st.number_input("Change in Working Capital (ΔWC)", value=0.0, step=0.0001, format="%.4f")
+    EBIT = st.text_input("EBIT (₹ Cr)", value="0.0")
+    taxRate = st.text_input("Tax rate (%)", value="25.0")
+    DA = st.text_input("Depreciation & Amortization", value="0.0")
+    Capex = st.text_input("Capital Expenditure", value="0.0")
+    DeltaWC = st.text_input("Change in Working Capital (ΔWC)", value="0.0")
+
+    try:
+        EBIT, taxRate, DA, Capex, DeltaWC = float(EBIT), float(taxRate)/100, float(DA), float(Capex), float(DeltaWC)
+    except ValueError: st.error("Enter valid numbers for FCFF inputs"); EBIT=taxRate=DA=Capex=DeltaWC=0.0
+
     NOPAT = EBIT * (1 - taxRate)
     FCFF0 = NOPAT + DA - Capex - DeltaWC
     st.info(f"Base FCFF = {round2(FCFF0)}")
 
-    years = st.number_input("Forecast period (years)", value=5, step=1)
-    ROCE = st.number_input("ROCE (%)", value=15.0, step=0.0001, format="%.4f") / 100
-    reinv = st.number_input("Reinvestment Rate (%)", value=40.0, step=0.0001, format="%.4f") / 100
+    years = st.text_input("Forecast period (years)", value="5")
+    ROCE = st.text_input("ROCE (%)", value="15.0")
+    reinv = st.text_input("Reinvestment Rate (%)", value="40.0")
+    gT = st.text_input("Terminal growth rate (%)", value="3.0")
+
+    try:
+        years, ROCE, reinv, gT = int(years), float(ROCE)/100, float(reinv)/100, float(gT)/100
+    except ValueError: st.error("Enter valid numbers"); years=1; ROCE=reinv=gT=0.0
+
     g = ROCE * reinv
-    gT = st.number_input("Terminal growth rate (%)", value=3.0, step=0.0001, format="%.4f") / 100
 
     # WACC
     use_direct_wacc = st.checkbox("Enter WACC directly?")
     if use_direct_wacc:
-        WACC_pct = st.number_input("Enter WACC (%)", value=10.0, step=0.0001, format="%.4f")
-        WACC = WACC_pct / 100.0
-    else:
-        KePct = st.number_input("Cost of Equity Ke (%)", value=12.0, step=0.0001, format="%.4f")
-        Ke = KePct/100
-        KdPct = st.number_input("Pre-tax Cost of Debt Kd (%)", value=8.0, step=0.0001, format="%.4f")
-        Kd_after = KdPct/100 * (1 - taxRate)
-        E = st.number_input("Market Value of Equity", value=1000.0, step=0.0001, format="%.4f")
-        D = st.number_input("Market Value of Debt", value=500.0, step=0.0001, format="%.4f")
-        if (E + D) == 0:
-            st.error("⚠️ Equity + Debt cannot be zero.")
-            WACC = 0
-        else:
-            W_e = E / (E + D)
-            W_d = D / (E + D)
-            WACC = W_e*Ke + W_d*Kd_after
-            st.success(f"WACC = {round2(WACC*100)}% (We={round2(W_e*100)}%, Wd={round2(W_d*100)}%)")
-
-    if st.button("💡 Calculate Intrinsic Value"):
-        if WACC <= gT:
-            st.error("⚠️ WACC must be greater than terminal growth rate.")
-        else:
-            # Forecast FCFF
-            pvFCFF, fcff_t = 0, FCFF0
-            for t in range(1, int(years)+1):
-                fcff_t *= (1+g)
-                pvFCFF += fcff_t / (1+WACC)**t
-
-            # Terminal Value
-            FCFF_Nplus1 = fcff_t * (1+gT)
-            TV = FCFF_Nplus1 / (WACC - gT)
-            PV_TV = TV / (1+WACC)**years
-            EV = pvFCFF + PV_TV
-
-            Borrowings = st.number_input("Borrowings", value=0.0, step=0.0001, format="%.4f")
-            Cash = st.number_input("Cash & Equivalents", value=0.0, step=0.0001, format="%.4f")
-            NetDebt = Borrowings - Cash
-            EquityValue = EV - NetDebt
-            Shares = st.number_input("Shares Outstanding", value=0.0, step=0.0001, format="%.4f")
-
-            if Shares <= 0:
-                st.error("⚠️ Shares Outstanding must be greater than 0.")
-            else:
-                IVps = EquityValue / Shares
-                st.success(f"Intrinsic Value per Share = {round2(IVps)}")
-                st.info(f"Margin of Safety (±20%): {round2(IVps*0.8)} — {round2(IVps*1.2)}")
-                save_history(ticker if ticker else "Unknown", IVps, "Non-Financials - FCFF")
-
-# ============================================================
-#   SHOW HISTORY + EXPORT
-# ============================================================
-if os.path.exists(history_file):
-    st.subheader("📜 Valuation History")
-    hist = pd.read_csv(history_file)
-    st.dataframe(hist)
-
-    # Download Excel
-    excel_bytes = export_excel(hist)
-    st.download_button(
-        label="📥 Download Valuation History (Excel)",
-        data=excel_bytes,
-        file_name="valuation_history.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+        WACC_pct = st.text_input("Enter WACC (%)", value="10.0")
+       
