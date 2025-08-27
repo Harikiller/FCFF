@@ -328,5 +328,12 @@ if os.path.exists(history_file):
     st.subheader("📜 Valuation History")
     hist = pd.read_csv(history_file)
     st.dataframe(hist)
-    excel_bytes = export_excel(hist)
-    st.download_button(label="📥 Download Valuation History (Excel)", data=excel_bytes, file_name="valuation_history.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    csv_bytes = hist.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="📥 Download Valuation History (CSV)",
+        data=csv_bytes,
+        file_name="valuation_history.csv",
+        mime="text/csv"
+    )
+
