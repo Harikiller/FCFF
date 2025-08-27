@@ -164,8 +164,14 @@ else:
     DeltaWC = st.text_input("Change in Working Capital (ΔWC)", value="0.0")
 
     try:
-        EBIT, taxRate, DA, Capex, DeltaWC = float(EBIT), float(taxRate)/100, float(DA), float(Capex), float(DeltaWC)
-    except ValueError: st.error("Enter valid numbers for FCFF inputs"); EBIT=taxRate=DA=Capex=DeltaWC=0.0
+        EBIT = float(EBIT)
+        taxRate = float(taxRate)/100
+        DA = float(DA)
+        Capex = float(Capex)
+        DeltaWC = float(DeltaWC)
+    except ValueError:
+        st.error("Enter valid numbers for FCFF inputs")
+        EBIT = taxRate = DA = Capex = DeltaWC = 0.0
 
     NOPAT = EBIT * (1 - taxRate)
     FCFF0 = NOPAT + DA - Capex - DeltaWC
@@ -177,8 +183,14 @@ else:
     gT = st.text_input("Terminal growth rate (%)", value="3.0")
 
     try:
-        years, ROCE, reinv, gT = int(years), float(ROCE)/100, float(reinv)/100, float(gT)/100
-    except ValueError: st.error("Enter valid numbers"); years=1; ROCE=reinv=gT=0.0
+        years = int(years)
+        ROCE = float(ROCE)/100
+        reinv = float(reinv)/100
+        gT = float(gT)/100
+    except ValueError:
+        st.error("Enter valid numbers for forecast inputs")
+        years = 1
+        ROCE = reinv = gT = 0.0
 
     g = ROCE * reinv
 
@@ -186,4 +198,84 @@ else:
     use_direct_wacc = st.checkbox("Enter WACC directly?")
     if use_direct_wacc:
         WACC_pct = st.text_input("Enter WACC (%)", value="10.0")
-       
+        try: WACC = float(WACC_pct)/100
+        except ValueError: st.error("Enter valid WACC"); WACC = 0.0
+    else:
+        KePct = st.text_input("Cost of Equity Ke (%)", value="12.0")
+        KdPct = st.text_input("Pre-tax Cost of Debt Kd (%)", value="8.0")
+        E = st.text_input("Market Value of Equity", value="1000.0")
+        D = st.text_input("Market Value of Debt", value="500.0")
+        try:
+            Ke = float(KePct)/100
+            Kd_after = float(KdPct)/100 * (1 - taxRate)
+            E = float(E)
+            D = float(D)
+        except ValueError:
+            st.error("Enter valid numbers for WACC calculation")
+            Ke = Kd_after = E = D = 0.0
+
+        if (E + D) == 0:
+            st.error("⚠️ Equity + Debt cannot be zero.")
+            WACC = 0.0
+        else:
+            W_e = E / (E + D)
+            W_d = D / (E + D)
+            WACC = W_e*Ke + W_d*Kd_after
+            st.success(f"WACC = {round2(WACC*100)}% (We={round2(W_e*100)}%, Wd={round2(W_d*100)}%)")
+
+    # Calculate Intrinsic Value
+    if st.button("💡 Calculate Intrinsic Value"):
+        if WACC <= gT:
+            st.error("⚠️ WACC must be greater than terminal growth rate.")
+        else:
+            # Forecast FCFF
+            pvFCFF, fcff_t = 0.0, FCFF0
+            for t in range(1, years+1):
+                fcff_t *= (1+g)
+                pvFCFF += fcff_t / (1+WACC)**t
+
+            # Terminal Value
+            FCFF_Nplus1 = fcff_t * (1+gT)
+            TV = FCFF_Nplus1 / (WACC - gT)
+            PV_TV = TV / (1+WACC)**years
+            EV = pvFCFF + PV_TV
+
+            Borrowings = st.text_input("Borrowings", value="0.0")
+            Cash = st.text_input("Cash & Equivalents", value="0.0")
+            Shares = st.text_input("Shares Outstanding", value="0.0")
+
+            try:
+                Borrowings = float(Borrowings)
+                Cash = float(Cash)
+                Shares = float(Shares)
+            except ValueError:
+                st.error("Enter valid numbers for Borrowings, Cash, Shares")
+                Borrowings = Cash = Shares = 0.0
+
+            NetDebt = Borrowings - Cash
+            EquityValue = EV - NetDebt
+
+            if Shares <= 0:
+                st.error("⚠️ Shares Outstanding must be greater than 0.")
+            else:
+                IVps = EquityValue / Shares
+                st.success(f"Intrinsic Value per Share = {round2(IVps)}")
+                st.info(f"Margin of Safety (±20%): {round2(IVps*0.8)} — {round2(IVps*1.2)}")
+                save_history(ticker if ticker else "Unknown", IVps, "Non-Financials - FCFF")
+
+# ============================================================
+#   SHOW HISTORY + EXPORT
+# ============================================================
+if os.path.exists(history_file):
+    st.subheader("📜 Valuation History")
+    hist = pd.read_csv(history_file)
+    st.dataframe(hist)
+
+    # Download Excel
+    excel_bytes = export_excel(hist)
+    st.download_button(
+        label="📥 Download Valuation History (Excel)",
+        data=excel_bytes,
+        file_name="valuation_history.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
